@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calendário de Oportunidades — RDR Películas</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+  background: #f0f2f5;
+  color: #111827;
+  min-height: 100vh;
+}
+
+/* ── Loading ── */
+.loading-overlay {
+  position: fixed; inset: 0;
+  background: #f0f2f5;
+  z-index: 9000;
+  display: flex; align-items: center; justify-content: center;
+}
+.loading-overlay.hidden { display: none; }
+.spinner {
+  width: 44px; height: 44px;
+  border: 4px solid #e2e8f0;
+  border-top-color: #1a3a5c;
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Stats ── */
+.stats-row {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  gap: 12px; margin-bottom: 22px;
+}
+.stat-box {
+  background: #fff; border-radius: 10px;
+  padding: 14px 10px; text-align: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,.07);
+}
+.stat-num { font-size: 30px; font-weight: 800; line-height: 1.1; }
+.stat-num.s-total   { color: #1a3a5c; }
+.stat-num.s-urgente { color: #e53e3e; }
+.stat-num.s-proxima { color: #dd6b20; }
+.stat-num.s-noprazo { color: #276749; }
+.stat-num.s-enc     { color: #718096; }
+.stat-lbl { font-size: 11px; color: #a0aec0; margin-top: 4px; }
+
+/* ── Container ── */
+.container { max-width: 960px; margin: 0 auto; padding: 32px 20px 80px; }
+.page-header { margin-bottom: 28px; }
+.page-header h1 { font-size: 26px; font-weight: 800; color: #1a3a5c; }
+.page-header p  { color: #6b7280; font-size: 14px; margin-top: 4px; }
+
+/* ── Toolbar ── */
+.toolbar {
+  display: flex; justify-content: space-between;
+  align-items: center; margin-bottom: 20px;
+  flex-wrap: wrap; gap: 10px;
+}
+.filters { display: flex; gap: 8px; flex-wrap: wrap; }
+.filter-btn {
+  padding: 7px 16px; border-radius: 20px;
+  border: 1.5px solid #e2e8f0; background: #fff;
+  cursor: pointer; font-size: 13px; font-weight: 500; color: #718096;
+  transition: all .15s;
+}
+.filter-btn:hover:not(.active) { border-color: #a0aec0; }
+.filter-btn.active { background: #1a3a5c; color: #fff; border-color: #1a3a5c; }
+.btn-nova {
+  padding: 9px 18px; background: #1a3a5c; color: #fff;
+  border: none; border-radius: 8px; cursor: pointer;
+  font-size: 14px; font-weight: 600; white-space: nowrap;
+  transition: background .15s;
+}
+.btn-nova:hover { background: #1e4976; }
+.btn-importar {
+  padding: 9px 18px; background: #fff; color: #1a3a5c;
+  border: 1.5px solid #1a3a5c; border-radius: 8px; cursor: pointer;
+  font-size: 14px; font-weight: 600; white-space: nowrap;
+  transition: all .15s;
+}
+.btn-importar:hover { background: #f0f4f8; }
+
+/* ── Cards ── */
+.card {
+  background: #fff; border-radius: 12px; padding: 22px 24px;
+  margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.07);
+  border-left: 4px solid #e2e8f0;
+}
+.card.st-urgente { border-left-color: #e53e3e; }
+.card.st-proxima { border-left-color: #dd6b20; }
+.card.st-noprazo { border-left-color: #38a169; }
+.card.st-enc     { border-left-color: #a0aec0; opacity: .75; }
+
+.card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 6px; }
+.card-orgao { font-size: 16px; font-weight: 700; color: #1a5fa8; flex: 1; }
+.badge { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.badge.st-urgente { background: #fff5f5; color: #c53030; }
+.badge.st-proxima { background: #fffaf0; color: #c05621; }
+.badge.st-noprazo { background: #f0fff4; color: #276749; }
+.badge.st-enc     { background: #f7fafc; color: #718096; }
+
+.card-desc { font-size: 13.5px; color: #4a5568; line-height: 1.55; margin-bottom: 16px; }
+
+.card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 28px; margin-bottom: 14px; }
+.field-lbl { font-size: 10.5px; font-weight: 700; color: #a0aec0; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 2px; }
+.field-val { font-size: 13.5px; font-weight: 600; color: #1a202c; }
+
+.divider { border: none; border-top: 1px solid #f7fafc; margin: 12px 0; }
+.card-meta { font-size: 13px; color: #4a5568; margin-bottom: 4px; }
+.card-meta b { color: #1a202c; }
+
+.progress-wrap { margin-top: 12px; }
+.progress-bg { height: 4px; background: #f7fafc; border-radius: 2px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 2px; }
+.st-urgente .progress-fill { background: #e53e3e; }
+.st-proxima .progress-fill { background: #dd6b20; }
+.st-noprazo .progress-fill { background: #38a169; }
+.st-enc     .progress-fill { background: #a0aec0; }
+.days-lbl { font-size: 11.5px; color: #a0aec0; text-align: right; margin-top: 3px; }
+
+/* ── Decisão ── */
+.interesse-bar {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 14px; padding-top: 12px;
+  border-top: 1px solid #f7fafc; flex-wrap: wrap;
+}
+.interesse-label { font-size: 12px; font-weight: 700; color: #a0aec0; text-transform: uppercase; letter-spacing: .4px; margin-right: 2px; }
+.btn-interesse { padding: 6px 16px; border-radius: 7px; border: 1.5px solid; cursor: pointer; font-size: 13px; font-weight: 600; transition: all .15s; }
+.btn-sim { border-color: #9ae6b4; background: #f0fff4; color: #276749; }
+.btn-sim:hover  { background: #c6f6d5; }
+.btn-sim.active { background: #38a169; border-color: #38a169; color: #fff; }
+.btn-nao { border-color: #feb2b2; background: #fff5f5; color: #c53030; }
+.btn-nao:hover  { background: #fed7d7; }
+.btn-nao.active { background: #e53e3e; border-color: #e53e3e; color: #fff; }
+
+/* ── Files ── */
+.files-zone { margin-top: 14px; border-top: 1px solid #f7fafc; padding-top: 12px; }
+.files-toggle-row { display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; padding: 2px 0; }
+.files-toggle-label { font-size: 12.5px; font-weight: 600; color: #718096; }
+.files-chevron { font-size: 11px; color: #a0aec0; transition: transform .2s; }
+.files-chevron.open { transform: rotate(180deg); }
+.files-body { display: none; margin-top: 10px; }
+.files-body.open { display: block; }
+
+.file-row { display: flex; align-items: center; padding: 7px 10px; background: #f8fafc; border-radius: 7px; margin-bottom: 6px; gap: 8px; }
+.file-ico { font-size: 15px; flex-shrink: 0; }
+.file-nm  { flex: 1; font-size: 13px; color: #2d3748; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-sz  { font-size: 11px; color: #a0aec0; flex-shrink: 0; }
+.btn-xs   { padding: 3px 9px; border-radius: 5px; border: none; cursor: pointer; font-size: 12px; font-weight: 600; }
+.btn-dl   { background: #ebf8ff; color: #2b6cb0; }
+.btn-dl:hover  { background: #bee3f8; }
+.btn-del  { background: #fff5f5; color: #c53030; }
+.btn-del:hover { background: #fed7d7; }
+.no-files-msg { font-size: 12.5px; color: #a0aec0; text-align: center; padding: 8px 0; }
+
+.drop-zone {
+  border: 2px dashed #cbd5e0; border-radius: 8px; padding: 18px;
+  text-align: center; cursor: pointer; transition: all .15s; margin-top: 8px;
+}
+.drop-zone:hover, .drop-zone.dragover { border-color: #1a5fa8; background: #ebf8ff; }
+.drop-zone-icon { font-size: 26px; }
+.drop-zone-txt  { font-size: 12.5px; color: #718096; margin-top: 4px; }
+
+/* ── Observações ── */
+.obs-zone { margin-top: 14px; border-top: 1px solid #f7fafc; padding-top: 12px; }
+.obs-toggle-row { display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; padding: 2px 0; }
+.obs-toggle-label { font-size: 12.5px; font-weight: 600; color: #718096; }
+.obs-chevron { font-size: 11px; color: #a0aec0; transition: transform .2s; }
+.obs-chevron.open { transform: rotate(180deg); }
+.obs-body { display: none; margin-top: 10px; }
+.obs-body.open { display: block; }
+.obs-textarea {
+  width: 100%; min-height: 84px; padding: 10px 12px;
+  border: 1.5px solid #e2e8f0; border-radius: 8px;
+  font-size: 13px; color: #2d3748; font-family: inherit;
+  resize: vertical; outline: none; transition: border-color .15s; background: #fafbfc;
+}
+.obs-textarea:focus { border-color: #1a5fa8; background: #fff; }
+.obs-hint { font-size: 11px; color: #a0aec0; text-align: right; margin-top: 4px; }
+
+/* ── Card Footer ── */
+.card-foot { display: flex; gap: 8px; margin-top: 12px; }
+.btn-card  { padding: 5px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; }
+.btn-edit  { background: #f7fafc; color: #4a5568; }
+.btn-edit:hover    { background: #edf2f7; }
+.btn-del-card      { background: #fff5f5; color: #c53030; }
+.btn-del-card:hover{ background: #fed7d7; }
+
+/* ── Modal ── */
+.modal-backdrop {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.45); z-index: 900;
+  align-items: center; justify-content: center; padding: 20px;
+}
+.modal-backdrop.show { display: flex; }
+.modal-box {
+  background: #fff; border-radius: 16px; padding: 28px;
+  width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,.2);
+}
+.modal-title { font-size: 19px; font-weight: 700; color: #1a3a5c; margin-bottom: 20px; }
+
+.form-field { margin-bottom: 14px; }
+.form-field label {
+  display: block; font-size: 12px; font-weight: 700; color: #4a5568;
+  margin-bottom: 5px; text-transform: uppercase; letter-spacing: .4px;
+}
+.form-field input,
+.form-field textarea,
+.form-field select {
+  width: 100%; padding: 9px 12px; border: 1.5px solid #e2e8f0;
+  border-radius: 8px; font-size: 14px; color: #2d3748; outline: none;
+  font-family: inherit; transition: border-color .15s;
+}
+.form-field input:focus,
+.form-field textarea:focus,
+.form-field select:focus { border-color: #1a5fa8; }
+.form-field textarea { resize: vertical; min-height: 64px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.modal-footer {
+  display: flex; justify-content: flex-end; gap: 10px;
+  margin-top: 20px; padding-top: 16px; border-top: 1px solid #f7fafc;
+}
+.btn-cancel { padding: 9px 18px; background: #f7fafc; color: #718096; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; }
+.btn-save   { padding: 9px 20px; background: #1a3a5c; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; }
+.btn-save:hover { background: #1e4976; }
+.btn-del-modal { padding: 9px 18px; background: #fff5f5; color: #c53030; border: 1.5px solid #feb2b2; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; }
+.btn-del-modal:hover { background: #fed7d7; }
+
+/* ── Empty state ── */
+.empty-state { text-align: center; color: #a0aec0; padding: 60px 20px; font-size: 15px; }
+.empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+
+/* ── Toast ── */
+.toast {
+  position: fixed; bottom: 24px; right: 24px;
+  background: #1a3a5c; color: #fff; padding: 12px 20px;
+  border-radius: 8px; font-size: 14px; z-index: 9999;
+  box-shadow: 0 4px 12px rgba(0,0,0,.2);
+  transform: translateY(100px); opacity: 0; transition: all .3s;
+  pointer-events: none;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast.error { background: #c53030; }
+
+@media (max-width: 620px) {
+  .stats-row { grid-template-columns: repeat(3, 1fr); }
+  .card-grid { grid-template-columns: 1fr; }
+  .form-row  { grid-template-columns: 1fr; }
+  .toolbar   { flex-direction: column; align-items: stretch; }
+  .btn-nova  { text-align: center; }
+}
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+</div>
+
+<div class="container" id="mainApp" style="display:none">
+
+  <div class="page-header">
+    <h1>📅 Calendário de Oportunidades</h1>
+    <p>RDR Películas — Acompanhe os prazos das oportunidades enviadas aos clientes</p>
+  </div>
+
+  <div class="stats-row" id="statsRow"></div>
+
+  <div class="toolbar">
+    <div class="filters" id="filtersBar">
+      <button class="filter-btn active" data-f="all">Todas</button>
+      <button class="filter-btn" data-f="urgente">🔴 Urgentes</button>
+      <button class="filter-btn" data-f="proxima">🟠 Próximas</button>
+      <button class="filter-btn" data-f="noprazo">🟢 No prazo</button>
+      <button class="filter-btn" data-f="enc">⚫ Encerradas</button>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn-importar" id="btnImportar">⬆ Importar</button>
+      <button class="btn-nova" id="btnNova">+ Nova Oportunidade</button>
+    </div>
+  </div>
+  <input type="file" id="jsonImportInput" accept=".json" style="display:none">
+
+  <div id="cardsWrap"></div>
+</div>
+
+<!-- Modal: Adicionar / Editar -->
+<div class="modal-backdrop" id="modalOpp">
+  <div class="modal-box">
+    <div class="modal-title" id="modalOppTitle">Nova Oportunidade</div>
+    <div class="form-field">
+      <label>Órgão / Entidade *</label>
+      <input id="fOrgao" type="text" placeholder="Ex: Prefeitura Municipal de ...">
+    </div>
+    <div class="form-field">
+      <label>Descrição do objeto *</label>
+      <textarea id="fDesc" placeholder="Descreva o objeto da licitação..."></textarea>
+    </div>
+    <div class="form-row">
+      <div class="form-field">
+        <label>Número do Edital</label>
+        <input id="fEdital" type="text" placeholder="Dispensa nº 27/2026">
+      </div>
+      <div class="form-field">
+        <label>Processo</label>
+        <input id="fProcesso" type="text" placeholder="Processo 333/2026">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-field">
+        <label>Valor Estimado</label>
+        <input id="fValor" type="text" placeholder="R$ 0,00">
+      </div>
+      <div class="form-field">
+        <label>Modalidade</label>
+        <select id="fModalidade">
+          <option value="">Selecione...</option>
+          <option>Dispensa de Licitação</option>
+          <option>Dispensa Eletrônica</option>
+          <option>Pregão Eletrônico</option>
+          <option>Pregão Presencial</option>
+          <option>Concorrência</option>
+          <option>Tomada de Preços</option>
+          <option>Convite</option>
+          <option>RDC</option>
+          <option>Credenciamento</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-field">
+        <label>Prazo para proposta / Sessão *</label>
+        <input id="fPrazo" type="date">
+      </div>
+      <div class="form-field">
+        <label>Critério de julgamento</label>
+        <input id="fCriterio" type="text" placeholder="Menor preço global">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-field">
+        <label>Prazo de execução</label>
+        <input id="fExecucao" type="text" placeholder="60 dias úteis">
+      </div>
+      <div class="form-field">
+        <label>Data da sessão</label>
+        <input id="fSessao" type="date">
+      </div>
+    </div>
+    <div class="form-field">
+      <label>Como participar</label>
+      <input id="fParticipar" type="text" placeholder="E-mail, portal ou instruções de participação">
+    </div>
+    <div class="modal-footer">
+      <button class="btn-del-modal" id="btnDelOpp" style="display:none">🗑️ Excluir</button>
+      <div style="display:flex;gap:10px;margin-left:auto">
+        <button class="btn-cancel" id="btnCancelOpp">Cancelar</button>
+        <button class="btn-save"   id="btnSaveOpp">Salvar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+'use strict';
+
+// ──────────────────────────────────────────────────────────
+// 1. SUPABASE
+// ──────────────────────────────────────────────────────────
+const SUPA_URL = 'https://cnvdhgkrzybrtavgvbsf.supabase.co';
+const SUPA_KEY = 'sb_publishable_9EYCrVMBOl6TZeIOuCXfSg_2rNr0YtN';
+const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+const TABLE  = 'oportunidades_rdr';
+const BUCKET = 'arquivos';
+const PREFIX = 'rdr';
+
+// ──────────────────────────────────────────────────────────
+// 2. DADOS — tabela oportunidades_rdr
+// ──────────────────────────────────────────────────────────
+async function readData() {
+  const { data, error } = await sb
+    .from(TABLE)
+    .select('*')
+    .order('prazo', { ascending: true });
+  if (error) { showToast('Erro ao carregar dados.', true); return []; }
+  return data || [];
+}
+
+async function upsertOpp(opp) {
+  const { error } = await sb.from(TABLE).upsert(opp);
+  if (error) throw error;
+}
+
+async function deleteOppDB(id) {
+  const { error } = await sb.from(TABLE).delete().eq('id', id);
+  if (error) throw error;
+}
+
+async function updateField(id, field, value) {
+  const { error } = await sb.from(TABLE).update({ [field]: value }).eq('id', id);
+  if (error) throw error;
+}
+
+// ──────────────────────────────────────────────────────────
+// 3. ARQUIVOS — Supabase Storage
+// ──────────────────────────────────────────────────────────
+async function saveFileToOpp(oppId, file) {
+  const { error } = await sb.storage
+    .from(BUCKET)
+    .upload(`${PREFIX}/${oppId}/${file.name}`, file, { upsert: true });
+  if (error) throw error;
+}
+
+async function getFilesForOpp(oppId) {
+  const { data, error } = await sb.storage
+    .from(BUCKET)
+    .list(`${PREFIX}/${oppId}`, { sortBy: { column: 'name', order: 'asc' } });
+  if (error) return [];
+  return (data || []).filter(f => f.name !== '.emptyFolderPlaceholder');
+}
+
+async function downloadFileFromOpp(oppId, filename) {
+  const { data } = sb.storage.from(BUCKET).getPublicUrl(`${PREFIX}/${oppId}/${filename}`);
+  const a = Object.assign(document.createElement('a'), { href: data.publicUrl, download: filename, target: '_blank' });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+async function deleteFileFromOpp(oppId, filename) {
+  const { error } = await sb.storage.from(BUCKET).remove([`${PREFIX}/${oppId}/${filename}`]);
+  if (error) throw error;
+}
+
+async function deleteAllFilesForOpp(oppId) {
+  const files = await getFilesForOpp(oppId);
+  if (!files.length) return;
+  await sb.storage.from(BUCKET).remove(files.map(f => `${PREFIX}/${oppId}/${f.name}`));
+}
+
+// ──────────────────────────────────────────────────────────
+// 4. HELPERS
+// ──────────────────────────────────────────────────────────
+let activeFilter = 'all';
+let editingId    = null;
+
+function fmtDate(s) {
+  if (!s) return '—';
+  const [y, m, d] = s.split('-');
+  return `${d}/${m}/${y}`;
+}
+function fmtBytes(n) {
+  if (!n) return '';
+  if (n < 1024)        return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / 1024 / 1024).toFixed(1) + ' MB';
+}
+function calcStatus(prazo) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const end   = new Date(prazo + 'T00:00:00');
+  const diff  = Math.ceil((end - today) / 86400000);
+  if (diff < 0)  return { cls: 'enc',     days: diff, badge: 'Encerrada' };
+  if (diff <= 3) return { cls: 'urgente', days: diff, badge: `⚠️ ${diff} dia${diff !== 1 ? 's' : ''}` };
+  if (diff <= 7) return { cls: 'proxima', days: diff, badge: `${diff} dias` };
+  return               { cls: 'noprazo', days: diff, badge: `${diff} dias` };
+}
+function calcProgress(days) {
+  if (days <= 0) return 100;
+  return Math.min(98, Math.max(2, 100 - (days / 30) * 100));
+}
+function fileIcon(name) {
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  const m = { pdf:'📄',doc:'📝',docx:'📝',xls:'📊',xlsx:'📊',
+              jpg:'🖼️',jpeg:'🖼️',png:'🖼️',gif:'🖼️',webp:'🖼️',
+              zip:'🗜️',rar:'🗜️','7z':'🗜️',
+              dwg:'📐',dxf:'📐',skp:'📐',rvt:'📐',
+              mp4:'🎥',avi:'🎥',mov:'🎥',txt:'📃',csv:'📃' };
+  return m[ext] || '📎';
+}
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ──────────────────────────────────────────────────────────
+// 5. RENDERIZAÇÃO
+// ──────────────────────────────────────────────────────────
+async function renderStats() {
+  const data = await readData();
+  const c = { total: data.length, urgente: 0, proxima: 0, noprazo: 0, enc: 0 };
+  data.forEach(o => c[calcStatus(o.prazo).cls]++);
+  document.getElementById('statsRow').innerHTML = `
+    <div class="stat-box"><div class="stat-num s-total">${c.total}</div><div class="stat-lbl">Total</div></div>
+    <div class="stat-box"><div class="stat-num s-urgente">${c.urgente}</div><div class="stat-lbl">Urgentes</div></div>
+    <div class="stat-box"><div class="stat-num s-proxima">${c.proxima}</div><div class="stat-lbl">Próximas</div></div>
+    <div class="stat-box"><div class="stat-num s-noprazo">${c.noprazo}</div><div class="stat-lbl">No prazo</div></div>
+    <div class="stat-box"><div class="stat-num s-enc">${c.enc}</div><div class="stat-lbl">Encerradas</div></div>
+  `;
+  return data;
+}
+
+async function renderCards() {
+  const data  = await readData();
+  const shown = activeFilter === 'all' ? data : data.filter(o => calcStatus(o.prazo).cls === activeFilter);
+  const wrap  = document.getElementById('cardsWrap');
+
+  if (!shown.length) {
+    wrap.innerHTML = `<div class="empty-state"><div class="icon">📋</div>Nenhuma oportunidade encontrada.</div>`;
+    return;
+  }
+
+  wrap.innerHTML = shown.map(o => {
+    const { cls, days, badge } = calcStatus(o.prazo);
+    const pct     = calcProgress(days);
+    const daysLbl = days < 0 ? 'Encerrada' : days === 0 ? 'Vence hoje!' : `${days} dia(s) restante(s)`;
+
+    return `
+<div class="card st-${cls}" id="card-${esc(o.id)}">
+  <div class="card-top">
+    <div class="card-orgao">${esc(o.orgao)}</div>
+    <span class="badge st-${cls}">${badge}</span>
+  </div>
+  <div class="card-desc">${esc(o.descricao || '')}</div>
+  <div class="card-grid">
+    <div><div class="field-lbl">Edital</div><div class="field-val">${esc(o.edital || '—')}${o.processo ? ' | '+esc(o.processo) : ''}</div></div>
+    <div><div class="field-lbl">Valor Estimado</div><div class="field-val">${esc(o.valor || '—')}</div></div>
+    <div><div class="field-lbl">Prazo p/ Envio de Proposta</div><div class="field-val">${fmtDate(o.prazo)}</div></div>
+    <div><div class="field-lbl">Data da sessão</div><div class="field-val">${o.sessao ? fmtDate(o.sessao) : '—'}</div></div>
+    <div><div class="field-lbl">Modalidade</div><div class="field-val">${esc(o.modalidade || '—')}</div></div>
+    <div><div class="field-lbl">Critério</div><div class="field-val">${esc(o.criterio || '—')}</div></div>
+    <div><div class="field-lbl">Prazo de Execução</div><div class="field-val">${esc(o.execucao || '—')}</div></div>
+  </div>
+  <hr class="divider">
+  ${o.participar ? `<div class="card-meta">📤 <b>Como participar:</b> ${esc(o.participar)}</div>` : ''}
+  <div class="progress-wrap">
+    <div class="progress-bg"><div class="progress-fill" style="width:${pct.toFixed(1)}%"></div></div>
+    <div class="days-lbl">${daysLbl}</div>
+  </div>
+
+  <div class="interesse-bar">
+    <span class="interesse-label">Decisão:</span>
+    <button class="btn-interesse btn-sim${o.interesse === 'sim' ? ' active' : ''}" data-iid="${esc(o.id)}" data-ival="sim">✓ Participar</button>
+    <button class="btn-interesse btn-nao${o.interesse === 'nao' ? ' active' : ''}" data-iid="${esc(o.id)}" data-ival="nao">✗ Não participar</button>
+  </div>
+
+  <div class="files-zone">
+    <div class="files-toggle-row" data-toggle="${esc(o.id)}">
+      <span class="files-toggle-label" id="flbl-${esc(o.id)}">📁 Arquivos</span>
+      <span class="files-chevron" id="chev-${esc(o.id)}">▼</span>
+    </div>
+    <div class="files-body" id="fbody-${esc(o.id)}">
+      <div id="flist-${esc(o.id)}"></div>
+      <div class="drop-zone" data-oppid="${esc(o.id)}"
+           ondragover="dzOver(event,this)" ondragleave="dzLeave(this)" ondrop="dzDrop(event,this)">
+        <div class="drop-zone-icon">📂</div>
+        <div class="drop-zone-txt">Clique ou arraste arquivos aqui para adicionar</div>
+      </div>
+      <input type="file" multiple id="fi-${esc(o.id)}" style="display:none"
+             data-oppid="${esc(o.id)}" onchange="onFileInput(event)">
+    </div>
+  </div>
+
+  <div class="obs-zone">
+    <div class="obs-toggle-row" data-obs-toggle="${esc(o.id)}">
+      <span class="obs-toggle-label" id="oblbl-${esc(o.id)}">📝 Observações${o.observacoes ? ' ✓' : ''}</span>
+      <span class="obs-chevron" id="obchev-${esc(o.id)}">▼</span>
+    </div>
+    <div class="obs-body" id="obody-${esc(o.id)}">
+      <textarea class="obs-textarea" id="otxt-${esc(o.id)}"
+                placeholder="Adicione observações sobre esta oportunidade..."
+                data-obs-id="${esc(o.id)}">${esc(o.observacoes || '')}</textarea>
+      <div class="obs-hint">Salvo automaticamente ao sair do campo</div>
+    </div>
+  </div>
+
+  <div class="card-foot">
+    <button class="btn-card btn-edit"     data-edit="${esc(o.id)}">✏️ Editar</button>
+    <button class="btn-card btn-del-card" data-del="${esc(o.id)}">🗑️ Excluir</button>
+  </div>
+</div>`;
+  }).join('');
+}
+
+async function renderFileList(oppId) {
+  const el    = document.getElementById(`flist-${oppId}`);
+  const lbl   = document.getElementById(`flbl-${oppId}`);
+  if (!el) return;
+  el.innerHTML = '<div class="no-files-msg">Carregando...</div>';
+  const files = await getFilesForOpp(oppId);
+  if (!files.length) { el.innerHTML = '<div class="no-files-msg">Nenhum arquivo adicionado</div>'; }
+  else {
+    el.innerHTML = files.map(f => `
+      <div class="file-row">
+        <span class="file-ico">${fileIcon(f.name)}</span>
+        <span class="file-nm" title="${esc(f.name)}">${esc(f.name)}</span>
+        <span class="file-sz">${fmtBytes(f.metadata?.size)}</span>
+        <button class="btn-xs btn-dl"  data-dlopp="${esc(oppId)}" data-dlname="${esc(f.name)}">⬇ Baixar</button>
+        <button class="btn-xs btn-del" data-delopp="${esc(oppId)}" data-delname="${esc(f.name)}">✕</button>
+      </div>`).join('');
+  }
+  if (lbl) lbl.textContent = `📁 Arquivos${files.length > 0 ? ` (${files.length})` : ''}`;
+}
+
+// ──────────────────────────────────────────────────────────
+// 6. ARQUIVOS — ações
+// ──────────────────────────────────────────────────────────
+function toggleFiles(oppId) {
+  const body = document.getElementById(`fbody-${oppId}`);
+  const chev = document.getElementById(`chev-${oppId}`);
+  if (!body) return;
+  const open = body.classList.toggle('open');
+  if (chev) chev.classList.toggle('open', open);
+  if (open) renderFileList(oppId);
+}
+
+function dzOver(e, el)  { e.preventDefault(); el.classList.add('dragover'); }
+function dzLeave(el)    { el.classList.remove('dragover'); }
+async function dzDrop(e, el) {
+  e.preventDefault(); el.classList.remove('dragover');
+  const oppId = el.dataset.oppid;
+  const files = Array.from(e.dataTransfer.files);
+  if (!files.length) return;
+  showToast('Enviando arquivo(s)...');
+  try {
+    for (const f of files) await saveFileToOpp(oppId, f);
+    await renderFileList(oppId);
+    showToast(`${files.length} arquivo(s) enviado(s)!`);
+  } catch { showToast('Erro ao enviar arquivo.', true); }
+}
+
+async function onFileInput(e) {
+  const oppId = e.target.dataset.oppid;
+  const files = Array.from(e.target.files);
+  if (!files.length) return;
+  e.target.value = '';
+  showToast('Enviando arquivo(s)...');
+  try {
+    for (const f of files) await saveFileToOpp(oppId, f);
+    await renderFileList(oppId);
+    showToast(`${files.length} arquivo(s) enviado(s)!`);
+  } catch { showToast('Erro ao enviar arquivo.', true); }
+}
+
+// ──────────────────────────────────────────────────────────
+// 7. OBSERVAÇÕES
+// ──────────────────────────────────────────────────────────
+function toggleObs(oppId) {
+  const body = document.getElementById(`obody-${oppId}`);
+  const chev = document.getElementById(`obchev-${oppId}`);
+  if (!body) return;
+  const open = body.classList.toggle('open');
+  if (chev) chev.classList.toggle('open', open);
+  if (open) document.getElementById(`otxt-${oppId}`)?.focus();
+}
+
+async function saveObservacao(oppId, texto) {
+  try {
+    await updateField(oppId, 'observacoes', texto.trim());
+    const lbl = document.getElementById(`oblbl-${oppId}`);
+    if (lbl) lbl.textContent = `📝 Observações${texto.trim() ? ' ✓' : ''}`;
+  } catch { showToast('Erro ao salvar observação.', true); }
+}
+
+// ──────────────────────────────────────────────────────────
+// 8. DECISÃO
+// ──────────────────────────────────────────────────────────
+async function setInteresse(oppId, valor) {
+  const data = await readData();
+  const opp  = data.find(o => o.id === oppId);
+  if (!opp) return;
+  const novoValor = opp.interesse === valor ? null : valor;
+  try {
+    await updateField(oppId, 'interesse', novoValor);
+    const card = document.getElementById(`card-${oppId}`);
+    if (card) {
+      card.querySelector('[data-ival="sim"]').classList.toggle('active', novoValor === 'sim');
+      card.querySelector('[data-ival="nao"]').classList.toggle('active', novoValor === 'nao');
+    }
+  } catch { showToast('Erro ao salvar decisão.', true); }
+}
+
+// ──────────────────────────────────────────────────────────
+// 9. CRUD OPORTUNIDADES
+// ──────────────────────────────────────────────────────────
+function openAdd() {
+  editingId = null;
+  document.getElementById('modalOppTitle').textContent = 'Nova Oportunidade';
+  document.getElementById('btnDelOpp').style.display = 'none';
+  clearForm();
+  showModal('modalOpp');
+}
+
+async function openEdit(id) {
+  const data = await readData();
+  const opp  = data.find(o => o.id === id);
+  if (!opp) return;
+  editingId = id;
+  document.getElementById('modalOppTitle').textContent = 'Editar Oportunidade';
+  document.getElementById('btnDelOpp').style.display = 'inline-block';
+  document.getElementById('fOrgao').value      = opp.orgao      || '';
+  document.getElementById('fDesc').value       = opp.descricao  || '';
+  document.getElementById('fEdital').value     = opp.edital     || '';
+  document.getElementById('fProcesso').value   = opp.processo   || '';
+  document.getElementById('fValor').value      = opp.valor      || '';
+  document.getElementById('fPrazo').value      = opp.prazo      || '';
+  document.getElementById('fModalidade').value = opp.modalidade || '';
+  document.getElementById('fCriterio').value   = opp.criterio   || '';
+  document.getElementById('fExecucao').value   = opp.execucao   || '';
+  document.getElementById('fSessao').value     = opp.sessao     || '';
+  document.getElementById('fParticipar').value = opp.participar || '';
+  showModal('modalOpp');
+}
+
+async function saveOpp() {
+  const orgao = document.getElementById('fOrgao').value.trim();
+  const prazo = document.getElementById('fPrazo').value;
+  if (!orgao || !prazo) { alert('Preencha pelo menos Órgão/Entidade e Prazo.'); return; }
+
+  const opp = {
+    id:         editingId || `opp-${Date.now()}`,
+    orgao, prazo,
+    descricao:  document.getElementById('fDesc').value.trim(),
+    edital:     document.getElementById('fEdital').value.trim(),
+    processo:   document.getElementById('fProcesso').value.trim(),
+    valor:      document.getElementById('fValor').value.trim(),
+    modalidade: document.getElementById('fModalidade').value,
+    criterio:   document.getElementById('fCriterio').value.trim(),
+    execucao:   document.getElementById('fExecucao').value.trim(),
+    sessao:     document.getElementById('fSessao').value || null,
+    participar: document.getElementById('fParticipar').value.trim()
+  };
+
+  try {
+    await upsertOpp(opp);
+    closeModal('modalOpp');
+    await renderStats();
+    await renderCards();
+    showToast(editingId ? 'Oportunidade atualizada!' : 'Oportunidade adicionada!');
+  } catch { showToast('Erro ao salvar oportunidade.', true); }
+}
+
+async function deleteOpp(id) {
+  if (!confirm('Excluir esta oportunidade e todos os arquivos vinculados?')) return;
+  try {
+    await deleteAllFilesForOpp(id);
+    await deleteOppDB(id);
+    await renderStats();
+    await renderCards();
+    showToast('Oportunidade excluída.');
+  } catch { showToast('Erro ao excluir.', true); }
+}
+
+function clearForm() {
+  ['fOrgao','fDesc','fEdital','fProcesso','fValor','fPrazo',
+   'fModalidade','fCriterio','fExecucao','fSessao','fParticipar']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+}
+
+// ──────────────────────────────────────────────────────────
+// 10. UI
+// ──────────────────────────────────────────────────────────
+function showModal(id)  { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+let toastTimer = null;
+function showToast(msg, isError = false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isError ? ' error' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+// ──────────────────────────────────────────────────────────
+// 11. EVENTOS
+// ──────────────────────────────────────────────────────────
+document.getElementById('btnNova').addEventListener('click', openAdd);
+document.getElementById('btnSaveOpp').addEventListener('click', saveOpp);
+document.getElementById('btnCancelOpp').addEventListener('click', () => closeModal('modalOpp'));
+document.getElementById('btnDelOpp').addEventListener('click', async () => {
+  if (!editingId) return;
+  if (!confirm('Excluir esta oportunidade e todos os arquivos vinculados?')) return;
+  try {
+    await deleteAllFilesForOpp(editingId);
+    await deleteOppDB(editingId);
+    closeModal('modalOpp');
+    await renderStats();
+    await renderCards();
+    showToast('Oportunidade excluída.');
+  } catch { showToast('Erro ao excluir.', true); }
+});
+document.getElementById('modalOpp').addEventListener('click', e => {
+  if (e.target === document.getElementById('modalOpp')) closeModal('modalOpp');
+});
+
+document.getElementById('filtersBar').addEventListener('click', e => {
+  const btn = e.target.closest('.filter-btn');
+  if (!btn) return;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  activeFilter = btn.dataset.f;
+  renderCards();
+});
+
+document.getElementById('cardsWrap').addEventListener('click', async e => {
+  const iBtn = e.target.closest('[data-ival]');
+  if (iBtn) { await setInteresse(iBtn.dataset.iid, iBtn.dataset.ival); return; }
+
+  const obsToggle = e.target.closest('[data-obs-toggle]');
+  if (obsToggle) { toggleObs(obsToggle.dataset.obsToggle); return; }
+
+  const toggle = e.target.closest('[data-toggle]');
+  if (toggle) { toggleFiles(toggle.dataset.toggle); return; }
+
+  const dz = e.target.closest('.drop-zone');
+  if (dz) { document.getElementById(`fi-${dz.dataset.oppid}`).click(); return; }
+
+  const dlBtn = e.target.closest('[data-dlname]');
+  if (dlBtn) { await downloadFileFromOpp(dlBtn.dataset.dlopp, dlBtn.dataset.dlname); return; }
+
+  const delBtn = e.target.closest('[data-delname]');
+  if (delBtn) {
+    if (!confirm(`Remover "${delBtn.dataset.delname}"?`)) return;
+    try {
+      await deleteFileFromOpp(delBtn.dataset.delopp, delBtn.dataset.delname);
+      await renderFileList(delBtn.dataset.delopp);
+    } catch { showToast('Erro ao remover arquivo.', true); }
+    return;
+  }
+
+  const editBtn = e.target.closest('[data-edit]');
+  if (editBtn) { await openEdit(editBtn.dataset.edit); return; }
+
+  const delCard = e.target.closest('[data-del]');
+  if (delCard) { await deleteOpp(delCard.dataset.del); return; }
+});
+
+document.getElementById('cardsWrap').addEventListener('focusout', async e => {
+  const ta = e.target.closest('[data-obs-id]');
+  if (ta) await saveObservacao(ta.dataset.obsId, ta.value);
+});
+
+// ──────────────────────────────────────────────────────────
+// 12. IMPORTAR JSON
+// ──────────────────────────────────────────────────────────
+document.getElementById('btnImportar').addEventListener('click', () => {
+  document.getElementById('jsonImportInput').click();
+});
+
+document.getElementById('jsonImportInput').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+
+  let items;
+  try {
+    const text = await file.text();
+    items = JSON.parse(text);
+  } catch {
+    showToast('Arquivo JSON inválido ou mal formatado.', true);
+    return;
+  }
+
+  if (!Array.isArray(items)) {
+    showToast('O JSON deve ser um array de oportunidades.', true);
+    return;
+  }
+
+  const existing = await readData();
+  const existingIds = new Set(existing.map(o => o.id));
+
+  const validos  = items.filter(o => o.orgao && o.prazo);
+  const novos    = validos.filter(o => !o.id || !existingIds.has(o.id));
+  const pulados  = items.length - novos.length;
+
+  if (!novos.length) {
+    showToast(`Nenhum registro novo. ${pulados} já existente(s) pulado(s).`);
+    return;
+  }
+
+  showToast(`Importando ${novos.length} oportunidade(s)...`);
+  let ok = 0, erros = 0;
+  for (const opp of novos) {
+    if (!opp.id) opp.id = `opp-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+    try { await upsertOpp(opp); ok++; } catch { erros++; }
+  }
+
+  await renderStats();
+  await renderCards();
+
+  let msg = `${ok} importada(s)`;
+  if (pulados) msg += `, ${pulados} já existente(s) pulada(s)`;
+  if (erros)   msg += `, ${erros} com erro`;
+  showToast(msg + '.');
+});
+
+// ──────────────────────────────────────────────────────────
+// 13. INIT
+// ──────────────────────────────────────────────────────────
+async function init() {
+  try {
+    await renderStats();
+    await renderCards();
+  } catch (e) {
+    console.error(e);
+    showToast('Erro de conexão com o banco de dados.', true);
+  } finally {
+    document.getElementById('loadingOverlay').classList.add('hidden');
+    document.getElementById('mainApp').style.display = 'block';
+  }
+}
+
+init();
+</script>
+</body>
+</html>
