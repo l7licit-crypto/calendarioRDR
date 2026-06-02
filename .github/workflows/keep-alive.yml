@@ -1,0 +1,19 @@
+name: Supabase Keep-Alive
+
+on:
+  schedule:
+      - cron: '0 11 * * 1'
+        workflow_dispatch:
+
+        jobs:
+          ping:
+              runs-on: ubuntu-latest
+                  steps:
+                        - name: Ping Supabase
+                                run: |
+                                          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+                                                      "https://cnvdhgkrzybrtavgvbsf.supabase.co/rest/v1/oportunidades_rdr?select=count&limit=1" \
+                                                                  -H "apikey: ${{ secrets.SUPA_KEY }}" \
+                                                                              -H "Authorization: Bearer ${{ secrets.SUPA_KEY }}")
+                                                                                        echo "Status: $STATUS"
+                                                                                                  [ "$STATUS" = "200" ] && echo "Supabase ativo!" || exit 1
