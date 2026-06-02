@@ -282,6 +282,7 @@ body {
       <button class="filter-btn" data-f="enc">⚫ Encerradas</button>
     </div>
     <div style="display:flex;gap:8px">
+      <button class="btn-importar" id="btnExportar">⬇ Exportar</button>
       <button class="btn-importar" id="btnImportar">⬆ Importar</button>
       <button class="btn-nova" id="btnNova">+ Nova Oportunidade</button>
     </div>
@@ -904,11 +905,85 @@ document.getElementById('jsonImportInput').addEventListener('change', async e =>
 });
 
 // ──────────────────────────────────────────────────────────
-// 13. INIT
+// 13. EXPORTAR BACKUP
+// ──────────────────────────────────────────────────────────
+async function exportBackup() {
+  const data = await readData();
+  if (!data.length) { showToast('Nenhum dado para exportar.', true); return; }
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const date = new Date().toISOString().split('T')[0];
+  const a    = Object.assign(document.createElement('a'), {
+    href: url, download: `backup_rdr_${date}.json`
+  });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  showToast(`Backup exportado: ${data.length} oportunidade(s).`);
+}
+
+document.getElementById('btnExportar').addEventListener('click', exportBackup);
+
+// ──────────────────────────────────────────────────────────
+// 14. BACKUP LOCAL AUTOMÁTICO (localStorage)
+// ──────────────────────────────────────────────────────────
+const LS_KEY = 'rdr_backup';
+
+async function salvarBackupLocal() {
+  try {
+    const data = await readData();
+    if (!data.length) return;
+    localStorage.setItem(LS_KEY, JSON.stringify({ data, savedAt: new Date().toISOString() }));
+  } catch(e) { /* silencioso */ }
+}
+
+function temBackupLocal() {
+  const raw = localStorage.getItem(LS_KEY);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+async function restaurarDoBackupLocal() {
+  const backup = temBackupLocal();
+  if (!backup || !backup.data || !backup.data.length) {
+    showToast('Nenhum backup local encontrado.', true); return;
+  }
+  const data = backup.data;
+  const date = backup.savedAt ? backup.savedAt.substring(0,10) : '?';
+  if (!confirm(`Restaurar ${data.length} oportunidade(s) do backup local de ${date}?`)) return;
+  showToast('Restaurando...');
+  let ok = 0, erros = 0;
+  for (const opp of data) {
+    try { await upsertOpp(opp); ok++; } catch { erros++; }
+  }
+  await renderStats();
+  await renderCards();
+  showToast(`${ok} restaurada(s)${erros ? `, ${erros} com erro` : ''}.`);
+}
+
+// ──────────────────────────────────────────────────────────
+// 15. INIT
 // ──────────────────────────────────────────────────────────
 async function init() {
   try {
     await renderStats();
+    const data = await readData();
+
+    // Se o banco está vazio mas há backup local, oferecer restauração
+    if (data.length === 0) {
+      const backup = temBackupLocal();
+      if (backup && backup.data && backup.data.length > 0) {
+        const date = backup.savedAt ? backup.savedAt.substring(0,10) : '?';
+        const restaurar = confirm(
+          `⚠️ O calendário está vazio, mas encontrei um backup local de ${date} com ${backup.data.length} oportunidade(s).\n\nDeseja restaurar agora?`
+        );
+        if (restaurar) { await restaurarDoBackupLocal(); }
+      }
+    } else {
+      // Banco tem dados — salvar backup local silenciosamente
+      await salvarBackupLocal();
+    }
+
     await renderCards();
   } catch (e) {
     console.error(e);
